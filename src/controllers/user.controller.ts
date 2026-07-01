@@ -24,11 +24,11 @@ export class UserController {
       const { page, limit, offset } = getPaginationOptions(req);
       const { search, isActive } = req.query as {
         search?: string;
-        isActive?: string;
+        isActive?: boolean;
       };
 
       const where: Record<string, unknown> = { role: UserRole.BORROWER };
-      if (isActive !== undefined) where["isActive"] = isActive === "true";
+      if (isActive !== undefined) where["isActive"] = isActive;
       if (search) {
         where[Op.or as unknown as string] = [
           { name: { [Op.iLike]: `%${search}%` } },
