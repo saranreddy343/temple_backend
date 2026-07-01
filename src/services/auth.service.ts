@@ -6,13 +6,9 @@ import { env } from "../config/env";
 import { generateOTP } from "../utils/helpers";
 import { logger } from "../utils/logger";
 import { auditService } from "./audit.service";
+import { otpStorage, otpProvider } from "./otp";
 
-const otpStore = new Map<
-  string,
-  { otp: string; expiresAt: Date; attempts: number }
->();
-
-export const getOtpStore = () => otpStore;
+export const getOtpStore = () => otpStorage; // kept for backward compat with controller
 
 export class AuthService {
   generateTokens(payload: JwtPayload): {
@@ -53,47 +49,55 @@ export class AuthService {
     return { user, ...tokens };
   }
 
-  async sendOTP(mobile: string): Promise<void> {
+  async sendOTP(
+    mobile: string,
+  ): Promise<{ expiresIn: number; devOtp?: string }> {
     const user = await User.findOne({
       where: { mobile, role: UserRole.BORROWER, isActive: true },
     });
     if (!user) throw new Error("Mobile number not registered");
 
-    const otp = generateOTP(env.OTP_LENGTH);
-    const expiresAt = new Date(Date.now() + env.OTP_EXPIRY_MINUTES * 60 * 1000);
-
-    otpStore.set(mobile, { otp, expiresAt, attempts: 0 });
-
-    // In production, send via Twilio. For dev, log to console.
-    if (env.NODE_ENV === "development") {
-      logger.info(`[DEV OTP] Mobile: ${mobile} | OTP: ${otp}`);
-    } else {
-      await this.sendSMSOTP(mobile, otp);
+    // Prevent OTP spam — enforce resend cooldown
+    if (!otpStorage.canResend(mobile)) {
+      const wait = otpStorage.secondsUntilResend(mobile);
+      throw new Error(
+        `Please wait ${wait} second${wait !== 1 ? "s" : ""} before requesting a new OTP.`,
+      );
     }
+
+    const otp = generateOTP(env.OTP_LENGTH);
+    otpStorage.set(mobile, otp, env.OTP_EXPIRY_MINUTES * 60 * 1000);
+
+    const result = await otpProvider.send(mobile, otp);
+
+    return {
+      expiresIn: env.OTP_EXPIRY_MINUTES * 60,
+      devOtp: result.devOtp,
+    };
   }
 
   async verifyOTP(
     mobile: string,
     otp: string,
   ): Promise<{ user: User; accessToken: string; refreshToken: string }> {
-    const stored = otpStore.get(mobile);
+    const stored = otpStorage.get(mobile);
     if (!stored)
       throw new Error("OTP not found or expired. Please request a new OTP.");
 
-    if (new Date() > stored.expiresAt) {
-      otpStore.delete(mobile);
+    if (otpStorage.isExpired(stored)) {
+      otpStorage.delete(mobile);
       throw new Error("OTP has expired. Please request a new one.");
     }
 
-    stored.attempts += 1;
-    if (stored.attempts > 5) {
-      otpStore.delete(mobile);
+    const attempts = otpStorage.incrementAttempts(mobile);
+    if (attempts > stored.maxAttempts) {
+      otpStorage.delete(mobile);
       throw new Error("Too many failed attempts. Please request a new OTP.");
     }
 
     if (stored.otp !== otp) throw new Error("Invalid OTP");
 
-    otpStore.delete(mobile);
+    otpStorage.delete(mobile);
 
     const user = await User.findOne({
       where: { mobile, role: UserRole.BORROWER, isActive: true },
@@ -148,24 +152,6 @@ export class AuthService {
     await user.update({ password: newPassword });
 
     await auditService.log(userId, "CHANGE_PASSWORD", "User", user.id);
-  }
-
-  private async sendSMSOTP(mobile: string, otp: string): Promise<void> {
-    try {
-      const twilio = await import("twilio");
-      const client = twilio.default(
-        env.TWILIO_ACCOUNT_SID,
-        env.TWILIO_AUTH_TOKEN,
-      );
-      await client.messages.create({
-        body: `Your Temple Finance OTP is: ${otp}. Valid for ${env.OTP_EXPIRY_MINUTES} minutes.`,
-        from: env.TWILIO_PHONE_NUMBER,
-        to: `+91${mobile}`,
-      });
-    } catch (error) {
-      logger.error("Failed to send OTP SMS:", error);
-      throw new Error("Failed to send OTP. Please try again.");
-    }
   }
 
   async hashPassword(password: string): Promise<string> {

@@ -12,6 +12,9 @@ interface NotificationAttributes {
   createdBy?: string;
   scheduledDate?: Date;
   status: NotificationStatus;
+  /** Metadata for deep linking (loanId, expenseId, screen, etc.) */
+  data?: Record<string, string>;
+  failedTokens?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -34,6 +37,8 @@ export class Notification
   declare createdBy: string | undefined;
   declare scheduledDate: Date | undefined;
   declare status: NotificationStatus;
+  declare data: Record<string, string> | undefined;
+  declare failedTokens: number | undefined;
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
 }
@@ -81,6 +86,15 @@ Notification.init(
       type: DataTypes.ENUM(...Object.values(NotificationStatus)),
       allowNull: false,
       defaultValue: NotificationStatus.PENDING,
+    },
+    data: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    failedTokens: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: 0,
     },
   },
   {
