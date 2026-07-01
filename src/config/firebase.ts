@@ -1,29 +1,46 @@
 import admin from "firebase-admin";
-import { env } from "./env";
+import path from "path";
+import fs from "fs";
 import { logger } from "../utils/logger";
 
 let firebaseApp: admin.app.App | null = null;
 
-export const initializeFirebase = (): void => {
-  if (
-    !env.FIREBASE_PROJECT_ID ||
-    !env.FIREBASE_PRIVATE_KEY ||
-    !env.FIREBASE_CLIENT_EMAIL
-  ) {
-    logger.warn(
-      "Firebase credentials not configured. Push notifications will be disabled.",
-    );
-    return;
-  }
+const SERVICE_ACCOUNT_PATH = path.resolve(
+  __dirname,
+  "temple-df356-firebase-adminsdk-fbsvc-2c6d868da0.json",
+);
 
+export const initializeFirebase = (): void => {
   try {
-    firebaseApp = admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: env.FIREBASE_PROJECT_ID,
-        privateKey: env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
-        clientEmail: env.FIREBASE_CLIENT_EMAIL,
-      }),
-    });
+    let credential: admin.credential.Credential;
+
+    if (fs.existsSync(SERVICE_ACCOUNT_PATH)) {
+      // Load directly from service account JSON file (most reliable — no env-var escaping issues)
+      const serviceAccount = JSON.parse(
+        fs.readFileSync(SERVICE_ACCOUNT_PATH, "utf-8"),
+      );
+      credential = admin.credential.cert(serviceAccount);
+      logger.info("Firebase: loading credentials from service account file.");
+    } else {
+      // Fallback to individual env vars
+      const projectId = process.env.FIREBASE_PROJECT_ID;
+      const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+      const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+
+      if (!projectId || !privateKey || !clientEmail) {
+        logger.warn(
+          "Firebase credentials not configured. Push notifications will be disabled.",
+        );
+        return;
+      }
+      credential = admin.credential.cert({
+        projectId,
+        privateKey: privateKey.replace(/\\n/g, "\n"),
+        clientEmail,
+      });
+    }
+
+    firebaseApp = admin.initializeApp({ credential });
     logger.info("Firebase Admin SDK initialized successfully.");
   } catch (error) {
     logger.error("Failed to initialize Firebase:", error);

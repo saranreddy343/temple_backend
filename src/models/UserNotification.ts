@@ -7,12 +7,13 @@ interface UserNotificationAttributes {
   userId: string;
   isRead: boolean;
   readAt?: Date;
+  openedAt?: Date;
   createdAt?: Date;
 }
 
 interface UserNotificationCreationAttributes extends Optional<
   UserNotificationAttributes,
-  "id" | "isRead" | "readAt"
+  "id" | "isRead" | "readAt" | "openedAt"
 > {}
 
 export class UserNotification
@@ -24,6 +25,7 @@ export class UserNotification
   declare userId: string;
   declare isRead: boolean;
   declare readAt: Date | undefined;
+  declare openedAt: Date | undefined;
   declare readonly createdAt: Date;
 }
 
@@ -49,6 +51,10 @@ UserNotification.init(
       defaultValue: false,
     },
     readAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    openedAt: {
       type: DataTypes.DATE,
       allowNull: true,
     },

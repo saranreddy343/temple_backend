@@ -2,6 +2,7 @@ import { Response, NextFunction } from "express";
 import { AuthenticatedRequest, ExpenseCategory } from "../types";
 import { sendSuccess, sendCreated, sendError } from "../utils/response";
 import { expenseService } from "../services/expense.service";
+import { notificationService } from "../services/notification.service";
 import { Expense, User } from "../models";
 
 export class ExpenseController {
@@ -63,6 +64,8 @@ export class ExpenseController {
         adminId: req.user!.id,
       });
       sendCreated(res, expense, "Expense recorded successfully");
+      // Fire-and-forget notification to all borrowers
+      notificationService.sendExpenseNotification(expense, req.user!.id).catch(() => {});
     } catch (error) {
       if (error instanceof Error) sendError(res, error.message, 400);
       else next(error);

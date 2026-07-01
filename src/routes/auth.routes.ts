@@ -44,11 +44,4 @@ router.patch("/fcm-token", authenticate, (req, res, next) =>
   authController.updateFCMToken(req as never, res, next),
 );
 
-// Dev-only: return current OTP for testing (never expose in production)
-if (process.env.NODE_ENV === "development") {
-  router.get("/otp/dev/:mobile", (req, res, next) =>
-    authController.getDevOTP(req, res, next),
-  );
-}
-
 export default router;

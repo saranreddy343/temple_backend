@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { AuthenticatedRequest } from "../types";
-import { authService, getOtpStore } from "../services/auth.service";
+import { authService } from "../services/auth.service";
 import { sendSuccess, sendError, sendCreated } from "../utils/response";
 
 export class AuthController {
@@ -41,8 +41,16 @@ export class AuthController {
   ): Promise<void> {
     try {
       const { mobile } = req.body as { mobile: string };
-      await authService.sendOTP(mobile);
-      sendSuccess(res, null, "OTP sent successfully");
+      const result = await authService.sendOTP(mobile);
+      // devOtp is only populated when USE_DEV_OTP=true / NODE_ENV=development
+      sendSuccess(
+        res,
+        {
+          expiresIn: result.expiresIn,
+          ...(result.devOtp !== undefined ? { devOtp: result.devOtp } : {}),
+        },
+        "OTP generated successfully",
+      );
     } catch (error) {
       if (error instanceof Error) {
         sendError(res, error.message, 400);
@@ -179,32 +187,6 @@ export class AuthController {
       const { fcmToken } = req.body as { fcmToken: string };
       await User.update({ fcmToken }, { where: { id: req.user!.id } });
       sendSuccess(res, null, "FCM token updated");
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  async getDevOTP(
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> {
-    try {
-      const { mobile } = req.params as { mobile: string };
-      const stored = getOtpStore().get(mobile);
-      if (!stored) {
-        sendError(
-          res,
-          "No active OTP for this number. Request one first.",
-          404,
-        );
-        return;
-      }
-      sendSuccess(
-        res,
-        { otp: stored.otp, expiresAt: stored.expiresAt },
-        "Dev OTP",
-      );
     } catch (error) {
       next(error);
     }

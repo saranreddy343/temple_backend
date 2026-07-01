@@ -24,6 +24,7 @@ interface EnvConfig {
   TWILIO_ACCOUNT_SID: string;
   TWILIO_AUTH_TOKEN: string;
   TWILIO_PHONE_NUMBER: string;
+  USE_DEV_OTP: boolean;
   RATE_LIMIT_WINDOW_MS: number;
   RATE_LIMIT_MAX_REQUESTS: number;
   ALLOWED_ORIGINS: string[];
@@ -62,6 +63,9 @@ export const env: EnvConfig = {
   TWILIO_ACCOUNT_SID: getEnvVar("TWILIO_ACCOUNT_SID", false),
   TWILIO_AUTH_TOKEN: getEnvVar("TWILIO_AUTH_TOKEN", false),
   TWILIO_PHONE_NUMBER: getEnvVar("TWILIO_PHONE_NUMBER", false),
+  USE_DEV_OTP:
+    getEnvVar("USE_DEV_OTP", false) === "true" ||
+    (getEnvVar("NODE_ENV", false) || "development") === "development",
   RATE_LIMIT_WINDOW_MS: parseInt(
     getEnvVar("RATE_LIMIT_WINDOW_MS", false) || "900000",
     10,
